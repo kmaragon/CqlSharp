@@ -143,21 +143,21 @@ namespace CqlSharp
             //capture values
             var sequence = ClockSequenceNumber;
 
-            var assumedLastTime = _lastTime;
             if (node == null)
             {
-                if (time < assumedLastTime)
+                if (time < _lastTime)
                 {
                     _nodeId = CreateNodeId();
                 }
 
                 node = _nodeId;
+
+                // we are less interested in locking this now
+                // since it's only used to give us additional entropy
+                // when we aren't given a MAC address
+                _lastTime = time;
             }
 
-            // we are less interested in locking this now
-            // since it's only used to give us additional entropy
-            // when we aren't given a MAC address
-            _lastTime = time;
             return GenerateTimeBasedGuid(time, (int)sequence, node);
         }
 
