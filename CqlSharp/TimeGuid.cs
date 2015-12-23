@@ -14,6 +14,7 @@
 // limitations under the License.
 
 using System;
+using System.Threading;
 
 namespace CqlSharp
 {
@@ -52,14 +53,11 @@ namespace CqlSharp
         // random node that is 16 bytes
         private static byte[] _nodeId;
 
-        //clockId stuff
-        private static readonly int ClockSequenceSeed;
         private const int MaxClockId = 1 << 14; //14 bits clockId
-        private static int _clockSequenceNumber;
+        private static uint _clockSequenceNumber;
 
         //time stuff
         private static long _lastTime;
-        private static int _timeSequenceNumber;
 
         /// <summary>
         /// Initializes the <see cref="TimeGuid" /> class.
@@ -67,8 +65,18 @@ namespace CqlSharp
         static TimeGuid()
         {
             _nodeId = CreateNodeId();
-            ClockSequenceSeed = Random.Next()%MaxClockId;
             _clockSequenceNumber = (ClockSequenceSeed + 1)%MaxClockId;
+        }
+
+
+        //clockId stuff
+        private static int ClockSequenceIndex = 0;
+        private static uint ClockSequenceSeed
+        {
+            get
+            {
+                return ((uint)Interlocked.Increment(ref ClockSequenceIndex)) % MaxClockId;
+            }
         }
 
         /// <summary>
@@ -135,7 +143,7 @@ namespace CqlSharp
             dateTime = dateTime.ToUniversalTime();
             var time = (dateTime - GregorianCalendarStart).Ticks;
 
-            int sequence;
+            uint sequence;
             byte[] nodeId;
 
             lock(SyncLock)
@@ -148,14 +156,9 @@ namespace CqlSharp
                 if(time != _lastTime)
                 {
                     _clockSequenceNumber = ClockSequenceSeed;
-                    _timeSequenceNumber = 0;
                 }
                 else
                 {
-                    //increment time if we are out of clockIds
-                    if(_clockSequenceNumber == ClockSequenceSeed)
-                        _timeSequenceNumber = _timeSequenceNumber + 1;
-
                     //increment clockId
                     _clockSequenceNumber = (_clockSequenceNumber + 1)%MaxClockId;
                 }
@@ -164,12 +167,11 @@ namespace CqlSharp
                 _lastTime = time;
 
                 //capture values
-                time = time + _timeSequenceNumber;
                 sequence = _clockSequenceNumber;
                 nodeId = node ?? _nodeId;
             }
 
-            return GenerateTimeBasedGuid(time, sequence, nodeId);
+            return GenerateTimeBasedGuid(time, (int)sequence, nodeId);
         }
 
         /// <summary>

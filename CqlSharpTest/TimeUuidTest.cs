@@ -18,6 +18,8 @@ using System.Collections.Concurrent;
 using System.Numerics;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace CqlSharp.Test
 {
@@ -27,25 +29,18 @@ namespace CqlSharp.Test
         [TestMethod]
         public void TimeUuidIssue()
         {
-            // this test uses BigInteger to check, otherwise the Dictionary
-            // will complain because Guid's GetHashCode will collide
-            var timestamps = new ConcurrentDictionary<BigInteger, Guid>();
+            var baseDate = DateTime.UtcNow;
+            var generatedGuids = new Guid[10000];
 
-            Action runner = delegate
+            byte[] mac = new byte[] { 0x33, 0x30, 0xa0, 0x80, 0x10, 0x88 };
+            
+            Parallel.For(0, generatedGuids.Length, i =>
             {
-                // run a full clock sequence cycle (or so)
-                for(var n = 0; n < 10001; n++)
-                {
-                    var time = DateTime.UtcNow;
-                    var guid = time.GenerateTimeBasedGuid();
-                    var bigint = new BigInteger(guid.ToByteArray());
+                generatedGuids[i] = baseDate.AddTicks(i % 100).GenerateTimeBasedGuid(mac);
+            });
 
-                    Assert.IsTrue(timestamps.TryAdd(bigint, guid), "Key already exists!");
-                    //Assert.AreEqual(time.ToTimestamp(), guid.GetDateTime().ToTimestamp());
-                }
-            };
-
-            Parallel.Invoke(runner, runner, runner, runner);
+            var hashOfGuids = new HashSet<Guid>(generatedGuids);
+            Assert.AreEqual(generatedGuids.Length, hashOfGuids.Count); 
         }
 
         [TestMethod]
