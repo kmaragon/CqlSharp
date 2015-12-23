@@ -30,17 +30,33 @@ namespace CqlSharp.Test
         public void TimeUuidIssue()
         {
             var baseDate = DateTime.UtcNow;
-            var generatedGuids = new Guid[10000];
+            var generatedGuids = new Guid[50000];
 
-            byte[] mac = new byte[] { 0x33, 0x30, 0xa0, 0x80, 0x10, 0x88 };
-            
             Parallel.For(0, generatedGuids.Length, i =>
             {
-                generatedGuids[i] = baseDate.AddTicks(i % 100).GenerateTimeBasedGuid(mac);
+                generatedGuids[i] = baseDate.AddTicks(i % 3).GenerateTimeBasedGuid();
             });
 
             var hashOfGuids = new HashSet<Guid>(generatedGuids);
-            Assert.AreEqual(generatedGuids.Length, hashOfGuids.Count); 
+            Assert.AreEqual(generatedGuids.Length, hashOfGuids.Count);
+        }
+
+        [TestMethod]
+        public void MultiThreadedTimeUuidIssue()
+        {
+            var baseDate = DateTime.UtcNow;
+            var generatedGuids = new Guid[10000];
+
+            byte[] mac = { 0x33, 0x30, 0xa0, 0x80, 0x10, 0x88 };
+
+            Parallel.For(0, generatedGuids.Length, i =>
+            {
+                generatedGuids[i] = baseDate.AddTicks(i % 10).GenerateTimeBasedGuid(mac);
+            });
+
+            var hashOfGuids = new HashSet<Guid>(generatedGuids);
+            Assert.AreEqual(generatedGuids.Length, hashOfGuids.Count);
+            Assert.IsTrue(generatedGuids.All(g => g.ToString().EndsWith("3330a0801088")));
         }
 
         [TestMethod]

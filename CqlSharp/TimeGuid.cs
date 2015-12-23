@@ -33,8 +33,6 @@ namespace CqlSharp
     /// </remarks>
     public static class TimeGuid
     {
-        private static readonly object SyncLock = new object();
-
         /// <summary>
         /// The default Time Guid (nodeId, time and sequence all set to 0, but having the version number set to timeguid)
         /// </summary>
@@ -54,7 +52,7 @@ namespace CqlSharp
         private static byte[] _nodeId;
 
         private const int MaxClockId = 1 << 14; //14 bits clockId
-        private static uint _clockSequenceNumber;
+        private static int _clockSequenceNumber;
 
         //time stuff
         private static long _lastTime;
@@ -65,17 +63,16 @@ namespace CqlSharp
         static TimeGuid()
         {
             _nodeId = CreateNodeId();
-            _clockSequenceNumber = (ClockSequenceSeed + 1)%MaxClockId;
+            _clockSequenceNumber = 0;
         }
 
 
         //clockId stuff
-        private static int ClockSequenceIndex = 0;
-        private static uint ClockSequenceSeed
+        private static uint ClockSequenceNumber
         {
             get
             {
-                return ((uint)Interlocked.Increment(ref ClockSequenceIndex)) % MaxClockId;
+                return ((uint)Interlocked.Increment(ref _clockSequenceNumber)) % MaxClockId;
             }
         }
 
@@ -138,40 +135,30 @@ namespace CqlSharp
         {
             if(node != null && node.Length != 6)
                 throw new ArgumentException("Node must either be null or a byte[] of length 6", "node");
-
+            
             //get the 100ns since calendar start
             dateTime = dateTime.ToUniversalTime();
             var time = (dateTime - GregorianCalendarStart).Ticks;
 
-            uint sequence;
-            byte[] nodeId;
+            //capture values
+            var sequence = ClockSequenceNumber;
 
-            lock(SyncLock)
+            var assumedLastTime = _lastTime;
+            if (node == null)
             {
-                //generate a new nodeId when clock is set backward (to avoid collisions with earlier created uuids)
-                if(time < _lastTime)
+                if (time < assumedLastTime)
+                {
                     _nodeId = CreateNodeId();
-
-                //if time changed, reset sequence numbers
-                if(time != _lastTime)
-                {
-                    _clockSequenceNumber = ClockSequenceSeed;
-                }
-                else
-                {
-                    //increment clockId
-                    _clockSequenceNumber = (_clockSequenceNumber + 1)%MaxClockId;
                 }
 
-                //cache this time
-                _lastTime = time;
-
-                //capture values
-                sequence = _clockSequenceNumber;
-                nodeId = node ?? _nodeId;
+                node = _nodeId;
             }
 
-            return GenerateTimeBasedGuid(time, (int)sequence, nodeId);
+            // we are less interested in locking this now
+            // since it's only used to give us additional entropy
+            // when we aren't given a MAC address
+            _lastTime = time;
+            return GenerateTimeBasedGuid(time, (int)sequence, node);
         }
 
         /// <summary>
